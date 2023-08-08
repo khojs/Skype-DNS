@@ -1,0 +1,453 @@
+########################################################################
+# Name: Skype4B / Lync Certificate Checker
+# Version: v1.0.0 (1/12/2016)
+# Date: 1/12/2016
+# Created By: James Cussen
+# Web Site: http://www.myskypelab.com
+#
+# Notes: This is a Powershell tool. To run the tool, open it from the Powershell command line or Right Click and select "Run with Powershell". The tool can be run from Windows or Windows Server.
+#		 The tool can be run on any PC or Server with Powershell 2+
+# 		 For more information on the requirements for setting up and using this tool please visit http://www.myskypelab.com.
+#
+# Copyright: Copyright (c) 2016, James Cussen (www.myskypelab.com) All rights reserved.
+# Licence: 	Redistribution and use of script, source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+#				1) Redistributions of script code must retain the above copyright notice, this list of conditions and the following disclaimer.
+#				2) Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+#				3) Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+#				4) This license does not include any resale or commercial use of this software.
+#				5) Any portion of this software may not be reproduced, duplicated, copied, sold, resold, or otherwise exploited for any commercial purpose without express written consent of James Cussen.
+#			THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; LOSS OF GOODWILL OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# Limitations: 
+# - Works on Powershell 2+
+# - Only IPv4 DNS lookup is supported.
+#
+# Import CSV Header Format: Domain,Type,Port
+# Example Federation Record: "microsoft.com","FED","",
+# Example SIP Record: "microsoft.com","SIP","",
+# Example SIP Internal Record: "microsoft.com","SIPINT","",
+# Example Direct Record: "sip.microsoft.com","DIR","5061",
+#
+# Release Notes:
+# 1.00 Initial Release.
+# 		
+########################################################################
+
+
+$theVersion = $PSVersionTable.PSVersion
+$MajorVersion = $theVersion.Major
+
+Write-Host ""
+Write-Host "--------------------------------------------------------------"
+Write-Host "Powershell Version Check..." -foreground "yellow"
+if($MajorVersion -eq  "1")
+{
+	Write-Host "This machine only has Version 1 Powershell installed.  This version of Powershell is not supported." -foreground "red"
+	exit
+}
+elseif($MajorVersion -eq  "2")
+{
+	Write-Host "This machine has version 2 Powershell installed. CHECK PASSED!" -foreground "green"
+}
+elseif($MajorVersion -eq  "3")
+{
+	Write-Host "This machine has version 3 Powershell installed. CHECK PASSED!" -foreground "green"
+}
+elseif($MajorVersion -eq  "4")
+{
+	Write-Host "This machine has version 4 Powershell installed. CHECK PASSED!" -foreground "green"
+}
+elseif($MajorVersion -eq  "5")
+{
+	Write-Host "This machine has version 5 Powershell installed. CHECK PASSED!" -foreground "green"
+}
+else
+{
+	Write-Host "This machine has version $MajorVersion Powershell installed. Unknown level of support for this version." -foreground "yellow"
+}
+Write-Host "--------------------------------------------------------------"
+Write-Host ""
+
+
+# boolean for cancelling lookup
+$script:CancelScan = $false
+$script:FirstCheck = $true
+$script:OKFailColumn = $true
+$script:RTFDisplayString = ""
+$script:RTFStart = "{\rtf1\ansi "
+$script:RTFStart += "{\colortbl;\red0\green0\blue0;\red46\green116\blue181;\red70\green70\blue70;\red68\green84\blue106;\red192\green0\blue0;\red112\green173\blue71;\red255\green255\blue0;\red255\green255\blue255;\red0\green0\blue128;\red0\green128\blue128;\red0\green128\blue0;\red128\green0\blue128;\red128\green0\blue0;\red128\green128\blue0;\red128\green128\blue128;\red192\green192\blue192;}"
+$script:RTFStart += "{\fonttbl{\f0\fcharset0 Courier New;}}\fs18"
+$script:RTFEnd = "}"
+
+$scriptpath = $MyInvocation.MyCommand.Path
+$dir = Split-Path $scriptpath
+$fso = New-Object -ComObject Scripting.FileSystemObject
+$shortname = $fso.GetFolder($dir).Path
+Write-host "Script directory: $shortname"
+
+
+# Set up the form  ============================================================
+
+[void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+[void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing") 
+
+$objForm = New-Object System.Windows.Forms.Form 
+$objForm.Text = "Skype4B / Lync Certificate Checker v1.00"
+$objForm.Size = New-Object System.Drawing.Size(880,460) 
+$objForm.MinimumSize = New-Object System.Drawing.Size(600,440)
+$objForm.StartPosition = "CenterScreen"
+[byte[]]$WindowIcon = @(66, 77, 56, 3, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0, 16, 0, 0, 0, 16, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 2, 3, 0, 0, 18, 11, 0, 0, 18, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114,0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0,198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 205, 132, 32, 234, 202, 160,255, 255, 255, 244, 229, 208, 205, 132, 32, 202, 123, 16, 248, 238, 224, 198, 114, 0, 205, 132, 32, 234, 202, 160, 255,255, 255, 255, 255, 255, 244, 229, 208, 219, 167, 96, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 248, 238, 224, 198, 114, 0, 198, 114, 0, 223, 176, 112, 255, 255, 255, 219, 167, 96, 198, 114, 0, 198, 114, 0, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 241, 220, 192, 198, 114, 0, 198,114, 0, 248, 238, 224, 255, 255, 255, 244, 229, 208, 198, 114, 0, 198, 114, 0, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 241, 220, 192, 198, 114, 0, 216, 158, 80, 255, 255, 255, 255, 255, 255, 252, 247, 240, 209, 141, 48, 198, 114, 0, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 241, 220, 192, 198, 114, 0, 241, 220, 192, 255, 255, 255, 252, 247, 240, 212, 149, 64, 234, 202, 160, 198, 114, 0, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 241, 220, 192, 205, 132, 32, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 248, 238, 224, 202, 123, 16, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 241, 220, 192, 234, 202, 160, 255, 255, 255, 255, 255, 255, 205, 132, 32, 198, 114, 0, 223, 176, 112, 223, 176, 112, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 244, 229, 208, 252, 247, 240, 255, 255, 255, 237, 211, 176, 198, 114, 0, 198, 114, 0, 202, 123, 16, 248, 238, 224, 255, 255, 255, 255, 255, 255, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 212, 149, 64, 255, 255, 255, 255, 255, 255, 255, 255, 255, 212, 149, 64, 198, 114, 0, 198, 114, 0, 198, 114, 0, 234, 202, 160, 255, 255,255, 255, 255, 255, 241, 220, 192, 205, 132, 32, 198, 114, 0, 198, 114, 0, 205, 132, 32, 227, 185, 128, 227, 185, 128, 227, 185, 128, 227, 185, 128, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 205, 132, 32, 227, 185, 128, 227, 185,128, 227, 185, 128, 219, 167, 96, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 198, 114, 0, 0, 0)
+$ico = New-Object IO.MemoryStream($WindowIcon, 0, $WindowIcon.Length)
+$objForm.Icon = [System.Drawing.Icon]::FromHandle((new-object System.Drawing.Bitmap -argument $ico).GetHIcon())
+$objForm.KeyPreview = $True
+$objForm.TabStop = $false
+
+
+#FEDSRVTest Label ============================================================
+$FEDSRVTestLabel = New-Object System.Windows.Forms.Label
+$FEDSRVTestLabel.Location = New-Object System.Drawing.Size(30,30) 
+$FEDSRVTestLabel.Size = New-Object System.Drawing.Size(60,15) 
+$FEDSRVTestLabel.Text = "FED SRV:"
+$FEDSRVTestLabel.TabStop = $false
+$FEDSRVTestLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$FEDSRVTestLabel.Add_Click(
+{
+	if($FEDSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+		$FEDSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+		$FEDSRVCheckBox.Checked = $true
+	}
+})
+$objForm.Controls.Add($FEDSRVTestLabel)
+
+
+# FED SRV Check Box ============================================================
+$FEDSRVCheckBox = New-Object System.Windows.Forms.Checkbox 
+$FEDSRVCheckBox.Location = New-Object System.Drawing.Size(90,28) 
+$FEDSRVCheckBox.Size = New-Object System.Drawing.Size(20,20)
+$FEDSRVCheckBox.TabStop = $false
+#$SIPSRVCheckBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom
+$FEDSRVCheckBox.Add_Click(
+{
+	if($FEDSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+	}
+})
+$objForm.Controls.Add($FEDSRVCheckBox) 
+$FEDSRVCheckBox.Checked = $false
+
+
+#SRVTest Label =================================================================
+$SIPSRVTestLabel = New-Object System.Windows.Forms.Label
+$SIPSRVTestLabel.Location = New-Object System.Drawing.Size(120,30) 
+$SIPSRVTestLabel.Size = New-Object System.Drawing.Size(57,15) 
+$SIPSRVTestLabel.Text = "SIP SRV:"
+$SIPSRVTestLabel.TabStop = $false
+$SIPSRVTestLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$SIPSRVTestLabel.Add_Click(
+{
+	if($SIPSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $true
+	}
+})
+$objForm.Controls.Add($SIPSRVTestLabel)
+
+
+# SIP SRV Check Box ============================================================
+$SIPSRVCheckBox = New-Object System.Windows.Forms.Checkbox 
+$SIPSRVCheckBox.Location = New-Object System.Drawing.Size(177,28) 
+$SIPSRVCheckBox.Size = New-Object System.Drawing.Size(20,20)
+$SIPSRVCheckBox.TabStop = $false
+#$SIPSRVCheckBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom
+$SIPSRVCheckBox.Add_Click(
+{
+	if($SIPSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+	}
+})
+$objForm.Controls.Add($SIPSRVCheckBox) 
+$SIPSRVCheckBox.Checked = $false
+
+
+#SIPINT SRVTest Label =================================================================
+$SIPINTSRVTestLabel = New-Object System.Windows.Forms.Label
+$SIPINTSRVTestLabel.Location = New-Object System.Drawing.Size(205,30) 
+$SIPINTSRVTestLabel.Size = New-Object System.Drawing.Size(75,15) 
+$SIPINTSRVTestLabel.Text = "SIP INT SRV:"
+$SIPINTSRVTestLabel.TabStop = $false
+$SIPINTSRVTestLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$SIPINTSRVTestLabel.Add_Click(
+{
+	if($SIPINTSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $false
+		$SIPINTSRVCheckBox.Checked = $true
+	}
+})
+$objForm.Controls.Add($SIPINTSRVTestLabel)
+
+
+# SIP INT SRV Check Box ============================================================
+$SIPINTSRVCheckBox = New-Object System.Windows.Forms.Checkbox 
+$SIPINTSRVCheckBox.Location = New-Object System.Drawing.Size(280,28) 
+$SIPINTSRVCheckBox.Size = New-Object System.Drawing.Size(20,20)
+$SIPINTSRVCheckBox.TabStop = $false
+#$SIPSRVCheckBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom
+$SIPINTSRVCheckBox.Add_Click(
+{
+	if($SIPINTSRVCheckBox.Checked -eq $true)
+    {
+        $PortTextBox.Enabled = $false
+		$PortTextBox.text = ""
+		$HostNameLabel.Text = "SIP Domain:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $false
+    }
+	else
+	{
+		$PortTextBox.Enabled = $true
+		$PortTextBox.text = "443"
+		$HostNameLabel.Text = "FQDN / IP:"
+		$FEDSRVCheckBox.Checked = $false
+		$SIPSRVCheckBox.Checked = $false
+	}
+})
+$objForm.Controls.Add($SIPINTSRVCheckBox) 
+$SIPINTSRVCheckBox.Checked = $false
+
+
+
+#Host Name Label ============================================================
+$HostNameLabel = New-Object System.Windows.Forms.Label
+$HostNameLabel.Location = New-Object System.Drawing.Size(5,52) 
+$HostNameLabel.Size = New-Object System.Drawing.Size(80,15) 
+$HostNameLabel.Text = "FQDN / IP:"
+$HostNameLabel.TextAlign = [System.Drawing.ContentAlignment]::TopRight
+$HostNameLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$HostNameLabel.TabStop = $false
+$objForm.Controls.Add($HostNameLabel)
+
+#Host Name Text box ============================================================
+$HostNameTextBox = new-object System.Windows.Forms.textbox
+$HostNameTextBox.location = new-object system.drawing.size(90,50)
+$HostNameTextBox.size= new-object system.drawing.size(220,15)
+$HostNameTextBox.text = "sip.microsoft.com"
+$HostNameTextBox.TabIndex = 1
+$HostNameTextBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$objform.controls.add($HostNameTextBox)
+$HostNameTextBox.add_KeyUp(
+{
+	if ($_.KeyCode -eq "Enter") 
+	{	
+		Add-Domain
+	}
+})
+
+
+#Host Name Label ============================================================
+$PortLabel = New-Object System.Windows.Forms.Label
+$PortLabel.Location = New-Object System.Drawing.Size(57,72) 
+$PortLabel.Size = New-Object System.Drawing.Size(32,15) 
+$PortLabel.Text = "Port: "
+$PortLabel.TabStop = $false
+$PortLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$objForm.Controls.Add($PortLabel)
+
+#Host Name Text box ============================================================
+$PortTextBox = new-object System.Windows.Forms.textbox
+$PortTextBox.location = new-object system.drawing.size(90,70)
+$PortTextBox.size= new-object system.drawing.size(220,15)
+$PortTextBox.text = "443"
+$PortTextBox.TabIndex = 2
+$PortTextBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$objform.controls.add($PortTextBox)
+$PortTextBox.add_KeyUp(
+{
+	if ($_.KeyCode -eq "Enter") 
+	{	
+		Add-Domain
+	}
+})
+$PortTextBox.Enabled = $true
+
+
+
+#Domain Add button
+$DomainNameAddButton = New-Object System.Windows.Forms.Button
+$DomainNameAddButton.Location = New-Object System.Drawing.Size(90,95)
+$DomainNameAddButton.Size = New-Object System.Drawing.Size(90,18)
+$DomainNameAddButton.Text = "Add"
+$DomainNameAddButton.TabStop = $false
+$DomainNameAddButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$DomainNameAddButton.Add_Click(
+{
+	Add-Domain
+})
+$objForm.Controls.Add($DomainNameAddButton)
+
+
+
+$ImportCSVButton = New-Object System.Windows.Forms.Button
+$ImportCSVButton.Location = New-Object System.Drawing.Size(200,95)
+$ImportCSVButton.Size = New-Object System.Drawing.Size(90,18)
+$ImportCSVButton.Text = "Import..."
+$ImportCSVButton.TabStop = $false
+$ImportCSVButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Top
+$ImportCSVButton.Add_Click(
+{
+	if($MajorVersion -ne  "2")
+	{
+		$Filter="CSV Files (*.csv*)|*.csv*"
+		[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+		$objDialog = New-Object System.Windows.Forms.OpenFileDialog
+		$objDialog.InitialDirectory = $shortname
+		$objDialog.Filter = $Filter
+		$objDialog.Title = "Open CSV File"
+		#$objDialog.CheckFileExists = $false
+		$Show = $objDialog.ShowDialog()
+		if ($Show -eq "OK")
+		{
+			[string]$InputFilename = $objDialog.FileName
+		}
+		else
+		{
+			[string]$InputFilename = ""
+			Write-Host "ERROR: No file provided." -foreground "red"
+			return
+		}
+
+		if(Test-Path $InputFilename)
+		{
+			Write-Host "Starting Port Testing." -foreground "yellow"
+
+			$Records = Import-Csv $InputFilename
+			
+			if($Records.length -eq 0)
+			{
+				Write-Host "ERROR: The file supplied is either not formatted correctly, or does not have any information in it." -foreground "Red"
+				return
+			}
+				
+			foreach($Record in $Records)
+			{
+				
+				[string]$DomainName = $Record.Domain
+				[string]$DomainType = $Record.Type
+				[string]$DomainPort = $Record.Port
+				#[string]$FQDNName = $Record.ProxyFqdn
+				
+				Write-Host "IMPORTING: $DomainName $DomainType $DomainPort" -foreground "yellow"
+
+				$DomainNameListboxItem = new-object System.Windows.Forms.ListViewItem("$DomainName")
+				
+				if($DomainPort -ne "" -and ($DomainType -ne "" -and $DomainType -ne "DIR"))
+				{
+					Write-Host "ERROR: Cannot have both Port and Domain type specified at the same time. Not importing $DomainName." -foreground "red"
+				}
+				else
+				{
+					$PortError = $false
+					$TypeError = $false
+					if($DomainPort -match "^(6553[0-5])$|^(655[0-2]\d)$|^(65[0-4]\d{2})$|^(6[0-4]\d{3})$|^([1-5]\d{4})$|^([1-9]\d{1,3})$|^(\d{1})$" -or $DomainPort -eq "")
+					{
+						[void]$DomainNameListboxItem.SubItems.Add($DomainPort)
+					}
+					else
+					{
+						Write-Host "ERROR: Port $DomainPort is not in range 1-65535" -foreground "red"
+						$PortError = $true
+					}
+					
+					if($DomainType -eq "SIP" -or $DomainType -eq "SIPINT" -or $DomainType -eq "FED" -or $DomainType -eq "DIR" -or $DomainType -eq "")
+					{
+						[void]$DomainNameListboxItem.SubItems.Add($DomainType)
+					}
+					else
+					{
+						Write-Host "ERROR: Invalid Domain Type $DomainType. Must be either SIP or FED." -foreground "red"
+						$TypeError = $true
+					}
+					
+					if($DomainPort -eq "" -and ($DomainType -eq "" -or $DomainType -eq "DIR"))
+					{
+						Write-Host "ERROR: Both Port and DomainType cannot be blank. Not importing $DomainName." -foreground "red"
+					}
+					elseif($PortError -or $TypeError)
+					{
+						#Do nothing, error already reported
+					}
+					else
+					{
+						$DomainNameListboxItem.ForeColor = "Black"
+						[void]$DomainNameListbox.Items.Add($DomainNameListboxItem)
+					}
+				}
+
+			}
